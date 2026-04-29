@@ -1,4 +1,5 @@
 # score2sound
 python tool that allows user to import image and download sound 
 
-gh repo clone ThinhLe-Dave/score2sound
+Get the code 
+git clone https://github.com/ThinhLe-Dave/score2sound.git
