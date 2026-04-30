@@ -64,7 +64,7 @@ async def handle_process_score(file: UploadFile = File(...)):
         if not mxl_path:
             print(f"⚠️ Pass 1 failed. Refining image and retrying...")
             # This triggers your OpenCV cleanup pipeline
-            cleaned_path = process_score(str(temp_raw_path)) 
+            cleaned_path = process_score(str(temp_raw_path), debug=True) 
             
             # Retry engine with the cleaned/healed image
             mxl_path = run_omr_engine(cleaned_path, f"{file_stem}_refined")
