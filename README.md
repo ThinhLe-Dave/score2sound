@@ -20,15 +20,44 @@ python3 -m pip install -r requirements.txt
 
 ## Prerequisites
 
-This project calls the `audiveris` CLI from the backend, so Audiveris must be installed and available in your shell `PATH`.
+Optical music recognition runs through **[Oemer](https://github.com/BreezeWhite/oemer)** (`oemer` CLI), installed with the Python dependencies below. ONNXRuntime is used by default; optionally install `oemer[tf]` for TensorFlow inference.
 
-Verify:
+Verify after setup:
 
 ```bash
-audiveris -version
+oemer -h
 ```
 
-If this command is not found, install Audiveris first, then rerun the service.
+On first run, Oemer may download model checkpoints into its package directory.
+
+### macOS SSL certificate note (common)
+
+If you see `ssl.SSLCertVerificationError: CERTIFICATE_VERIFY_FAILED` while Oemer is downloading checkpoints, run the service (and `oemer`) with a CA bundle from `certifi`:
+
+```bash
+source .venv/bin/activate
+export SSL_CERT_FILE="$(python -m certifi)"
+export REQUESTS_CA_BUNDLE="$SSL_CERT_FILE"
+oemer /absolute/path/to/score.png -o processed_scores/test_run
+```
+
+When running through `python3 main.py`, the service automatically sets SSL cert env vars for Oemer and applies NumPy alias compatibility for current Oemer releases.
+
+### Manual checkpoint download (fallback)
+
+If you cannot fix SSL on your machine, you can download the 4 checkpoint files and place them here:
+
+- `.venv/lib/python3.12/site-packages/oemer/checkpoints/unet_big/model.onnx`
+- `.venv/lib/python3.12/site-packages/oemer/checkpoints/unet_big/weights.h5`
+- `.venv/lib/python3.12/site-packages/oemer/checkpoints/seg_net/model.onnx`
+- `.venv/lib/python3.12/site-packages/oemer/checkpoints/seg_net/weights.h5`
+
+The URLs Oemer uses are:
+
+- `https://github.com/BreezeWhite/oemer/releases/download/checkpoints/1st_model.onnx`
+- `https://github.com/BreezeWhite/oemer/releases/download/checkpoints/1st_weights.h5`
+- `https://github.com/BreezeWhite/oemer/releases/download/checkpoints/2nd_model.onnx`
+- `https://github.com/BreezeWhite/oemer/releases/download/checkpoints/2nd_weights.h5`
 
 ## Run the service
 
@@ -66,5 +95,5 @@ curl -X POST "http://127.0.0.1:8000/process-score" \
 
 ### Error responses
 
-- HTTP `404`: Audiveris failed on both raw and refined image passes
+- HTTP `404`: Oemer failed on both raw and refined image passes
 - HTTP `500`: unexpected server/runtime error

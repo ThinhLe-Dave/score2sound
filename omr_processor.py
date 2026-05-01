@@ -22,7 +22,7 @@ class OMRProcessingConfig:
     median_blur_ksize: int = 1
 
 def load_and_resize(image_path, scale=2.0):
-    """Loads image and upscales to fix 'low interline' errors in Audiveris."""
+    """Loads image and upscales thin staff lines for the downstream OMR model."""
     img = cv2.imread(image_path)
     if img is None:
         raise FileNotFoundError(f"Could not load image at {image_path}")
@@ -116,7 +116,7 @@ def process_score(image_path, output_folder="temp_uploads/cleaned", config: OMRP
     output_dir.mkdir(parents=True, exist_ok=True)
     config = config or OMRProcessingConfig()
 
-    # Step-by-step processing to ensure a clean result for Audiveris
+    # Step-by-step processing to ensure a clean result for the OMR pass
     resized = load_and_resize(image_path, scale=config.scale)
     if config.minimal_mode:
         # Minimal mode avoids destructive filters that can blur staff lines.
