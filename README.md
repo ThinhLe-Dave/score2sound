@@ -12,11 +12,13 @@ cd score2sound
 ## Setup
 
 ```bash
-python3 -m venv venv
+python3.11 -m venv venv
 source venv/bin/activate
-python3 -m pip install --upgrade pip
-python3 -m pip install -r requirements.txt
+python3.11 -m pip install --upgrade pip
+python3.11 -m pip install -r requirements.txt
 ```
+
+> Note: This project depends on `numpy==1.23.5`, which does not have prebuilt wheels for Python 3.12. Use Python 3.11 for best compatibility with `oemer` and the pinned requirements.
 
 ## Prerequisites
 
@@ -63,6 +65,20 @@ The URLs Oemer uses are:
 
 ```bash
 python3 main.py
+```
+
+### Run helper script
+
+```bash
+chmod +x run.sh
+./run.sh serve
+```
+
+To install dependencies or run tests with the helper script:
+
+```bash
+./run.sh install
+./run.sh test
 ```
 
 ## Test locally
