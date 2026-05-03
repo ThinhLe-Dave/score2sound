@@ -2,7 +2,6 @@ import os
 import shutil
 import subprocess
 import sys
-import zipfile
 from pathlib import Path
 
 import certifi
@@ -16,67 +15,37 @@ app = FastAPI()
 # Configuration
 UPLOAD_DIR = Path("temp_uploads")
 OUTPUT_DIR = Path("processed_scores")
-OEMER_WRAPPER = (
-    "import sys\n"
-    "import numpy as np\n"
-    "if not hasattr(np, 'int'):\n"
-    "    np.int = int\n"
-    "if not hasattr(np, 'float'):\n"
-    "    np.float = float\n"
-    "if not hasattr(np, 'bool'):\n"
-    "    np.bool = bool\n"
-    "from oemer.ete import main\n"
-    "sys.argv = ['oemer', *sys.argv[1:]]\n"
-    "raise SystemExit(main())\n"
-)
 
 # Ensure base directories exist
 for d in [UPLOAD_DIR, OUTPUT_DIR]:
     d.mkdir(exist_ok=True)
 
 
-def _musicxml_to_mxl(musicxml_path: Path, mxl_path: Path) -> None:
-    """Wrap an uncompressed MusicXML file in a standard .mxl (zip) container."""
-    inner_name = musicxml_path.name
-    container = (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">\n'
-        "  <rootfiles>\n"
-        f'    <rootfile full-path="{inner_name}" '
-        'media-type="application/vnd.recordare.musicxml+xml"/>\n'
-        "  </rootfiles>\n"
-        "</container>\n"
-    )
-    mxl_path.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(mxl_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("META-INF/container.xml", container)
-        zf.write(musicxml_path, inner_name)
-
-
 def run_omr_engine(input_image_path, file_stem):
-    """Safely invokes Oemer and returns a packaged .mxl path."""
+    """Safely invokes Homr and returns the generated MusicXML path."""
     request_output_dir = OUTPUT_DIR / file_stem
     request_output_dir.mkdir(exist_ok=True, parents=True)
 
+    input_image_path = Path(input_image_path).resolve()
+    image_in_output = request_output_dir / input_image_path.name
+    shutil.copy(str(input_image_path), str(image_in_output))
+
     command = [
-        sys.executable,
-        "-c",
-        OEMER_WRAPPER,
-        str(input_image_path),
-        "-o",
-        str(request_output_dir),
+        "homr",
+        str(image_in_output),
     ]
 
     print(f"🚀 Running OMR on {file_stem}...")
-    print("\n--- DEBUG: OEMER COMMAND ---")
+    print("\n--- DEBUG: HOMR COMMAND ---")
     print(subprocess.list2cmdline(command))
     print("----------------------------\n")
 
     env = dict(os.environ)
-    # Fixes SSL_CERTIFICATE_VERIFY_FAILED on some macOS Python installs when Oemer
-    # downloads checkpoints via urllib.
     env.setdefault("SSL_CERT_FILE", certifi.where())
     env.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
+    venv_bin = Path(sys.executable).parent
+    env["PATH"] = f"{venv_bin}:{env.get('PATH', '')}"
+
     result = subprocess.run(command, capture_output=True, text=True, env=env)
     if result.returncode != 0:
         print(f"STDERR: {result.stderr}")
@@ -89,12 +58,17 @@ def run_omr_engine(input_image_path, file_stem):
         reverse=True,
     )
     if not musicxml_files:
+        musicxml_files = sorted(
+            request_output_dir.glob("**/*.xml"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+
+    if not musicxml_files:
         print(f"STDOUT: {result.stdout}")
         return None
 
-    mxl_out = request_output_dir / f"{file_stem}.mxl"
-    _musicxml_to_mxl(musicxml_files[0], mxl_out)
-    return mxl_out
+    return musicxml_files[0]
 
 @app.post("/process-score")
 async def handle_process_score(file: UploadFile = File(...)):
@@ -124,11 +98,18 @@ async def handle_process_score(file: UploadFile = File(...)):
         if not mxl_path:
             raise HTTPException(
                 status_code=404, 
-                detail="Oemer failed on both raw and refined image passes."
+                detail="Homr failed on both raw and refined image passes."
+            )
+
+        mxl_path = Path(mxl_path)
+        if not mxl_path.exists():
+            raise HTTPException(
+                status_code=500,
+                detail=f"MusicXML file was not created: {mxl_path}"
             )
 
         return FileResponse(
-            path=mxl_path, 
+            path=str(mxl_path), 
             media_type='application/vnd.recordare.musicxml+xml', 
             filename=f"{file_stem}.musicxml"
         )

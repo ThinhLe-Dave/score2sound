@@ -1,9 +1,8 @@
-# Requires Python 3.11 for best oemer compatibility.
-# numpy==1.23.5 does not provide wheels for Python 3.12, so a 3.11 venv is required.
+# Requires Python 3.11 for best Homr compatibility.
 fastapi
 uvicorn
 python-multipart
 opencv-python
 numpy
-oemer
+homr @ git+https://github.com/liebharc/homr.git
 certifi
