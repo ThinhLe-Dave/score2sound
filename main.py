@@ -5,8 +5,8 @@ import sys
 from pathlib import Path
 
 import certifi
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse
 import uvicorn
 from omr_processor import process_score
 
@@ -19,6 +19,12 @@ OUTPUT_DIR = Path("processed_scores")
 # Ensure base directories exist
 for d in [UPLOAD_DIR, OUTPUT_DIR]:
     d.mkdir(exist_ok=True)
+
+
+@app.get("/", response_class=HTMLResponse)
+async def read_root():
+    with open("templates/index.html", "r") as f:
+        return f.read()
 
 
 def run_omr_engine(input_image_path, file_stem):

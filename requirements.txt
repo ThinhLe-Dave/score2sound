@@ -6,3 +6,4 @@ opencv-python
 numpy
 homr @ git+https://github.com/liebharc/homr.git
 certifi
+jinja2
