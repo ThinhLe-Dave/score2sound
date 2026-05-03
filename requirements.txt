@@ -7,3 +7,4 @@ numpy
 homr @ git+https://github.com/liebharc/homr.git
 certifi
 jinja2
+music21

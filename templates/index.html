@@ -64,6 +64,40 @@
             text-align: center;
             margin-top: 20px;
         }
+        .result {
+            display: none;
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #e8f5e8;
+            border-radius: 5px;
+            border: 1px solid #4CAF50;
+        }
+        .result h3 {
+            color: #2e7d32;
+            margin-top: 0;
+        }
+        .buttons {
+            margin-top: 15px;
+        }
+        .btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        .btn:hover {
+            background-color: #45a049;
+        }
+        .btn.secondary {
+            background-color: #2196F3;
+        }
+        .btn.secondary:hover {
+            background-color: #1976D2;
+        }
     </style>
 </head>
 <body>
@@ -85,9 +119,21 @@
         <div class="loading" id="loading">
             <p>Processing your score... This may take a few moments.</p>
         </div>
+        
+        <div class="result" id="result">
+            <h3>✅ Processing Complete!</h3>
+            <p>Your sheet music has been successfully converted.</p>
+            <div class="buttons">
+                <button class="btn secondary" id="playBtn">🎵 Play Music</button>
+                <button class="btn" id="downloadMusicXmlBtn">📥 Download MusicXML</button>
+                <button class="btn" id="downloadMidiBtn">📥 Download MIDI</button>
+            </div>
+        </div>
     </div>
 
     <script>
+        let currentResult = null;
+        
         document.getElementById('uploadForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
@@ -96,6 +142,7 @@
             formData.append('file', fileInput.files[0]);
             
             document.getElementById('loading').style.display = 'block';
+            document.getElementById('result').style.display = 'none';
             
             fetch('/process-score', {
                 method: 'POST',
@@ -105,26 +152,44 @@
                 if (!response.ok) {
                     throw new Error('Processing failed');
                 }
-                return response.blob();
+                return response.json();
             })
-            .then(blob => {
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = fileInput.files[0].name.replace(/\.[^/.]+$/, "") + '.musicxml';
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                
+            .then(data => {
+                currentResult = data;
                 document.getElementById('loading').style.display = 'none';
-                alert('MusicXML file downloaded successfully!');
+                document.getElementById('result').style.display = 'block';
+                
+                // Enable/disable buttons based on available files
+                document.getElementById('downloadMusicXmlBtn').disabled = false;
+                document.getElementById('downloadMidiBtn').disabled = !data.midi_url;
             })
             .catch(error => {
                 document.getElementById('loading').style.display = 'none';
                 alert('Error processing the score: ' + error.message);
             });
+        });
+        
+        // Download MusicXML
+        document.getElementById('downloadMusicXmlBtn').addEventListener('click', function() {
+            if (currentResult) {
+                window.open(currentResult.musicxml_url, '_blank');
+            }
+        });
+        
+        // Download MIDI
+        document.getElementById('downloadMidiBtn').addEventListener('click', function() {
+            if (currentResult && currentResult.midi_url) {
+                window.open(currentResult.midi_url, '_blank');
+            }
+        });
+        
+        // Play Music (placeholder for now)
+        document.getElementById('playBtn').addEventListener('click', function() {
+            if (currentResult && currentResult.midi_url) {
+                alert('MIDI playback will be implemented. For now, please download the MIDI file and play it in your preferred MIDI player.');
+            } else {
+                alert('No MIDI file available for playback.');
+            }
         });
     </script>
 </body>
