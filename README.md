@@ -101,3 +101,27 @@ curl -X POST "http://127.0.0.1:8000/process-score" \
 
 - HTTP `404`: Homr failed on both raw and refined image passes
 - HTTP `500`: unexpected server/runtime error
+
+## Frontend Integration (Playback)
+
+To implement visual rendering and audio playback in your frontend, we recommend using **OpenSheetMusicDisplay (OSMD)**.
+
+### Implementation Example
+
+```javascript
+// 1. Initialize OSMD
+const osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay("osmd-container");
+
+// 2. Fetch MusicXML from the API response
+const response = await fetch(data.musicxml_url);
+const xmlText = await response.text();
+
+// 3. Load and Render
+await osmd.load(xmlText);
+osmd.render();
+
+// 4. For Playback (using osmd-audio-player addon)
+const playbackEngine = new OSMDAudioPlayer();
+await playbackEngine.loadScore(osmd);
+playbackEngine.play();
+```
