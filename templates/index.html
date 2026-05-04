@@ -6,11 +6,8 @@
     <title>Score2Sound - OMR Processor</title>
     <!-- Sheet Music Rendering Library -->
     <script src="https://unpkg.com/opensheetmusicdisplay@latest/build/opensheetmusicdisplay.min.js"></script>
-    <!-- Load the audio player as a module and expose it to the global scope -->
-    <script type="module">
-        import { OsmdAudioPlayer } from 'https://unpkg.com/osmd-audio-player@1.1.0/dist/index.js';
-        window.OsmdAudioPlayer = { OsmdAudioPlayer };
-    </script>
+    <!-- MIDI Player Library (Tone.js + Magenta + HTML MIDI Player) -->
+    <script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/html-midi-player@1.5.0"></script>
     <style>
         :root {
             --primary: #4f46e5;
@@ -189,6 +186,18 @@
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
             min-height: 200px;
         }
+        midi-player {
+            width: 100%;
+            margin-top: 15px;
+            --padding: 12px;
+            --border-radius: 8px;
+            --background-color: #f3f4f6;
+            --color: var(--primary);
+        }
+        midi-player::part(control-panel) {
+            background-color: #f3f4f6;
+            border: 1px solid #e5e7eb;
+        }
     </style>
 </head>
 <body>
@@ -225,8 +234,8 @@
             <div class="buttons">
                 <button class="btn" id="downloadMusicXmlBtn">📥 Download MusicXML</button>
                 <button class="btn" id="downloadMidiBtn">📥 Download MIDI</button>
-                <button class="btn secondary" id="playBtn">🔊 Preview MIDI</button>
             </div>
+            <midi-player id="midiPlayer" sound-font="https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus"></midi-player>
             <div id="osmd-container"></div>
         </div>
     </div>
@@ -234,7 +243,6 @@
     <script>
         let currentResult = null;
         let osmd = null;
-        let audioPlayer = null;
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
         const imagePreview = document.getElementById('image-preview');
@@ -278,7 +286,7 @@
             reader.readAsDataURL(file);
         }
 
-        async function initPlayback(xmlUrl) {
+        async function initPlayback(xmlUrl, midiUrl) {
             const loadingText = document.getElementById('loadingText');
             loadingText.textContent = "Rendering sheet music...";
             
@@ -295,23 +303,11 @@
                 await osmd.load(xmlText);
                 osmd.render();
                 
-                if (audioPlayer) {
-                    // Stop any existing playback before loading a new score
-                    audioPlayer.stop();
-                } else {
-                    audioPlayer = new OsmdAudioPlayer.OsmdAudioPlayer();
-                    
-                    // Automatically sync button UI with player state
-                    audioPlayer.on('statechange', (state) => {
-                        const playBtn = document.getElementById('playBtn');
-                        if (state === 'PLAYING' || state === 'playing') {
-                            playBtn.innerHTML = '⏸ Stop Preview';
-                        } else {
-                            playBtn.innerHTML = '🔊 Preview MIDI';
-                        }
-                    });
+                // Set the MIDI source for the player
+                if (midiUrl) {
+                    const player = document.getElementById('midiPlayer');
+                    player.src = midiUrl;
                 }
-                await audioPlayer.loadScore(osmd);
             } catch (err) {
                 console.error("Playback initialization failed:", err);
             }
@@ -344,10 +340,8 @@
             
             if (!fileInput.files.length) return;
 
-            if (audioPlayer && audioPlayer.state === 'playing') {
-                audioPlayer.stop();
-                document.getElementById('playBtn').innerHTML = '🔊 Preview MIDI';
-            }
+            // Clear previous MIDI source to stop playback
+            document.getElementById('midiPlayer').src = null;
 
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
@@ -377,7 +371,7 @@
                 // Show results before rendering to ensure container width is detected correctly
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('result').style.display = 'block';
-                initPlayback(data.musicxml_url);
+                initPlayback(data.musicxml_url, data.midi_url);
                 
                 // Enable/disable buttons based on available files
                 document.getElementById('downloadMusicXmlBtn').disabled = false;
@@ -405,21 +399,6 @@
         document.getElementById('downloadMidiBtn').addEventListener('click', function() {
             if (currentResult && currentResult.midi_url) {
                 window.open(currentResult.midi_url, '_blank');
-            }
-        });
-        
-        // Play Music logic
-        document.getElementById('playBtn').addEventListener('click', async function() {
-            if (audioPlayer) {
-                const state = audioPlayer.state.toLowerCase();
-                if (state === 'playing') {
-                    audioPlayer.stop();
-                } else {
-                    // The statechange listener will update the button text
-                    await audioPlayer.play();
-                }
-            } else if (!currentResult || !currentResult.musicxml_url) {
-                alert('No score available for playback.');
             }
         });
     </script>
