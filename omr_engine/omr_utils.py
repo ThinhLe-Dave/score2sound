@@ -6,10 +6,51 @@ from pathlib import Path
 
 import certifi
 from music21 import converter, midi
+from .omr_processor import process_score
+
+
+async def process_full_pipeline(upload_file, upload_dir, output_dir):
+    """Service logic to orchestrate the OMR process (Raw Pass -> Refined Pass)."""
+    file_stem = Path(upload_file.filename).stem
+    temp_raw_path = upload_dir / upload_file.filename
+    cleaned_path = None
+    
+    with open(temp_raw_path, "wb") as buffer:
+        shutil.copyfileobj(upload_file.file, buffer)
+
+    try:
+        print(f"🔄 Pass 1: Raw image OMR...")
+        mxl_path, req_out_dir = run_omr_engine(temp_raw_path, file_stem, output_dir)
+        
+        if not mxl_path:
+            print(f"⚠️ Pass 1 failed. Refining image...")
+            cleaned_path = process_score(str(temp_raw_path), debug=True) 
+            mxl_path, req_out_dir = run_omr_engine(Path(cleaned_path), f"{file_stem}_refined", output_dir)
+
+        if not mxl_path or not Path(mxl_path).exists():
+            raise FileNotFoundError("OMR Engine failed to produce MusicXML on both passes.")
+
+        midi_path = convert_musicxml_to_midi(str(mxl_path), req_out_dir, file_stem)
+        
+        return {
+            "stem": file_stem,
+            "mxl_path": str(mxl_path),
+            "midi_created": midi_path is not None
+        }
+
+    finally:
+        _cleanup_files([temp_raw_path, cleaned_path])
+
+
+def _cleanup_files(paths):
+    for p in paths:
+        if p:
+            path_obj = Path(p)
+            if path_obj.exists():
+                os.remove(path_obj)
 
 
 def run_omr_engine(input_image_path, file_stem, output_dir):
-    """Safely invokes Homr and returns the generated MusicXML path and output directory."""
     request_output_dir = output_dir / file_stem
     request_output_dir.mkdir(exist_ok=True, parents=True)
 
@@ -17,15 +58,7 @@ def run_omr_engine(input_image_path, file_stem, output_dir):
     image_in_output = request_output_dir / input_image_path.name
     shutil.copy(str(input_image_path), str(image_in_output))
 
-    command = [
-        "homr",
-        str(image_in_output),
-    ]
-
-    print(f"🚀 Running OMR on {file_stem}...")
-    print("\n--- DEBUG: HOMR COMMAND ---")
-    print(subprocess.list2cmdline(command))
-    print("----------------------------\n")
+    command = ["homr", str(image_in_output)]
 
     env = dict(os.environ)
     env.setdefault("SSL_CERT_FILE", certifi.where())
@@ -35,8 +68,6 @@ def run_omr_engine(input_image_path, file_stem, output_dir):
 
     result = subprocess.run(command, capture_output=True, text=True, env=env)
     if result.returncode != 0:
-        print(f"STDERR: {result.stderr}")
-        print(f"STDOUT: {result.stdout}")
         return None, None
 
     musicxml_files = sorted(
@@ -52,27 +83,19 @@ def run_omr_engine(input_image_path, file_stem, output_dir):
         )
 
     if not musicxml_files:
-        print(f"STDOUT: {result.stdout}")
         return None, None
 
     return musicxml_files[0], request_output_dir
 
 
 def convert_musicxml_to_midi(musicxml_path, output_dir, file_stem):
-    """Convert MusicXML to MIDI using music21."""
     try:
-        # Load the MusicXML file
         score = converter.parse(musicxml_path)
-
-        # Create MIDI file path
         midi_path = output_dir / f"{file_stem}.midi"
-
-        # Convert to MIDI
         mf = midi.translate.music21ObjectToMidiFile(score)
         mf.open(str(midi_path), 'wb')
         mf.write()
         mf.close()
-
         return midi_path
     except Exception as e:
         print(f"Error converting to MIDI: {e}")
@@ -80,12 +103,9 @@ def convert_musicxml_to_midi(musicxml_path, output_dir, file_stem):
 
 
 def find_file_in_output_dir(output_dir, file_stem, extension):
-    """Find a file with the given stem and extension in the output directory."""
     for subdir in output_dir.iterdir():
         if subdir.is_dir():
             files = list(subdir.glob(f"*.{extension}"))
-            if files:
-                # Check if this matches the file_stem
-                if file_stem in str(files[0]):
-                    return files[0]
+            if files and file_stem in str(files[0]):
+                return files[0]
     return None
