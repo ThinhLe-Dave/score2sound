@@ -4,9 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Score2Sound - OMR Processor</title>
-    <!-- Sheet Music Rendering and Playback Libraries -->
-    <script src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1.8.8/build/opensheetmusicdisplay.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/osmd-audio-player@1.1.0/dist/index.js"></script>
+    <!-- Sheet Music Rendering Library -->
+    <script src="https://unpkg.com/opensheetmusicdisplay@latest/build/opensheetmusicdisplay.min.js"></script>
+    <!-- Load the audio player as a module and expose it to the global scope -->
+    <script type="module">
+        import { OsmdAudioPlayer } from 'https://unpkg.com/osmd-audio-player@1.1.0/dist/index.js';
+        window.OsmdAudioPlayer = { OsmdAudioPlayer };
+    </script>
     <style>
         :root {
             --primary: #4f46e5;
@@ -291,8 +295,21 @@
                 await osmd.load(xmlText);
                 osmd.render();
                 
-                if (!audioPlayer) {
+                if (audioPlayer) {
+                    // Stop any existing playback before loading a new score
+                    audioPlayer.stop();
+                } else {
                     audioPlayer = new OsmdAudioPlayer.OsmdAudioPlayer();
+                    
+                    // Automatically sync button UI with player state
+                    audioPlayer.on('statechange', (state) => {
+                        const playBtn = document.getElementById('playBtn');
+                        if (state === 'PLAYING' || state === 'playing') {
+                            playBtn.innerHTML = '⏸ Stop Preview';
+                        } else {
+                            playBtn.innerHTML = '🔊 Preview MIDI';
+                        }
+                    });
                 }
                 await audioPlayer.loadScore(osmd);
             } catch (err) {
@@ -356,12 +373,11 @@
                 document.getElementById('progressBar').style.width = '100%';
                 document.getElementById('loadingText').textContent = "Processing complete!";
                 currentResult = data;
-                initPlayback(data.musicxml_url);
                 
-                setTimeout(() => {
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('result').style.display = 'block';
-                }, 500);
+                // Show results before rendering to ensure container width is detected correctly
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('result').style.display = 'block';
+                initPlayback(data.musicxml_url);
                 
                 // Enable/disable buttons based on available files
                 document.getElementById('downloadMusicXmlBtn').disabled = false;
@@ -395,12 +411,12 @@
         // Play Music logic
         document.getElementById('playBtn').addEventListener('click', async function() {
             if (audioPlayer) {
-                if (audioPlayer.state === 'playing') {
+                const state = audioPlayer.state.toLowerCase();
+                if (state === 'playing') {
                     audioPlayer.stop();
-                    this.innerHTML = '🔊 Preview MIDI';
                 } else {
+                    // The statechange listener will update the button text
                     await audioPlayer.play();
-                    this.innerHTML = '⏸ Stop Preview';
                 }
             } else if (!currentResult || !currentResult.musicxml_url) {
                 alert('No score available for playback.');
