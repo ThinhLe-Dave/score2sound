@@ -90,6 +90,20 @@
             text-align: center;
             margin-top: 30px;
         }
+        .progress-container {
+            width: 100%;
+            background-color: #e5e7eb;
+            border-radius: 9999px;
+            height: 8px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+        .progress-bar {
+            width: 0%;
+            height: 100%;
+            background-color: var(--primary);
+            transition: width 0.4s ease;
+        }
         .spinner {
             width: 40px;
             height: 40px;
@@ -184,7 +198,10 @@
         
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p>Processing your score... This may take a few moments.</p>
+            <div class="progress-container">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <p id="loadingText">Initializing OMR engine...</p>
         </div>
         
         <div class="result" id="result">
@@ -205,6 +222,7 @@
         const imagePreview = document.getElementById('image-preview');
         const previewContainer = document.getElementById('preview-container');
         const fileNameDisplay = document.getElementById('file-name');
+        let progressInterval;
 
         // Handle click on drop zone
         dropZone.addEventListener('click', () => fileInput.click());
@@ -241,6 +259,28 @@
             };
             reader.readAsDataURL(file);
         }
+
+        function startProgress() {
+            const bar = document.getElementById('progressBar');
+            const text = document.getElementById('loadingText');
+            let width = 0;
+            bar.style.width = '0%';
+            text.textContent = "Analyzing sheet music...";
+            
+            clearInterval(progressInterval);
+            progressInterval = setInterval(() => {
+                if (width < 95) {
+                    // Mimic progress slowing down as it reaches the end of detection
+                    const increment = Math.max(0.1, (95 - width) / 60);
+                    width += increment;
+                    bar.style.width = width + '%';
+                    
+                    if (width > 80) text.textContent = "Finalizing digital score and MIDI...";
+                    else if (width > 50) text.textContent = "Detecting notes and rhythms...";
+                    else if (width > 20) text.textContent = "Scanning staff lines...";
+                }
+            }, 200);
+        }
         
         document.getElementById('uploadForm').addEventListener('submit', function(e) {
             e.preventDefault();
@@ -254,6 +294,7 @@
             submitBtn.disabled = true;
             document.getElementById('loading').style.display = 'block';
             document.getElementById('result').style.display = 'none';
+            startProgress();
             
             fetch('/process-score', {
                 method: 'POST',
@@ -266,15 +307,22 @@
                 return response.json();
             })
             .then(data => {
+                clearInterval(progressInterval);
+                document.getElementById('progressBar').style.width = '100%';
+                document.getElementById('loadingText').textContent = "Processing complete!";
                 currentResult = data;
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('result').style.display = 'block';
+                
+                setTimeout(() => {
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('result').style.display = 'block';
+                }, 500);
                 
                 // Enable/disable buttons based on available files
                 document.getElementById('downloadMusicXmlBtn').disabled = false;
                 document.getElementById('downloadMidiBtn').disabled = !data.midi_url;
             })
             .catch(error => {
+                clearInterval(progressInterval);
                 document.getElementById('loading').style.display = 'none';
                 submitBtn.disabled = false;
                 alert('Error processing the score: ' + error.message);
