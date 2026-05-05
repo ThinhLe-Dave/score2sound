@@ -187,3 +187,17 @@ midi-player::part(control-panel) {
     background-color: #f3f4f6;
     border: 1px solid #e5e7eb;
 }
+
+.tempo-control {
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: #f3f4f6;
+    border-radius: 8px;
+    font-weight: 500;
+}
+.tempo-control input {
+    flex: 1;
+}

@@ -91,6 +91,14 @@ def run_omr_engine(input_image_path, file_stem, output_dir):
 def convert_musicxml_to_midi(musicxml_path, output_dir, file_stem):
     try:
         score = converter.parse(musicxml_path)
+        # Debug: Check if the score actually contains notes
+        all_notes = score.flatten().notes
+        print(f"📊 [Debug] MIDI Conversion: Found {len(all_notes)} total note objects.")
+        
+        # Log track information
+        for i, part in enumerate(score.parts):
+            print(f"   Track {i} ({part.partName}): {len(part.flatten().notes)} notes")
+        
         midi_path = output_dir / f"{file_stem}.midi"
         mf = midi.translate.music21ObjectToMidiFile(score)
         mf.open(str(midi_path), 'wb')

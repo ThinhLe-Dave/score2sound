@@ -45,7 +45,13 @@
                 <button class="btn" id="downloadMusicXmlBtn">📥 Download MusicXML</button>
                 <button class="btn" id="downloadMidiBtn">📥 Download MIDI</button>
             </div>
-            <midi-player id="midiPlayer" sound-font="https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus"></midi-player>
+            <div class="tempo-control">
+                <label for="tempoSlider">Tempo</label>
+                <input type="range" id="tempoSlider" min="30" max="240" value="100">
+                <span id="tempoValue">100 BPM</span>
+            </div>
+            <midi-player id="midiPlayer" sound-font="https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus" visualizer="#midiVisualizer"></midi-player>
+            <midi-visualizer id="midiVisualizer" type="piano-roll"></midi-visualizer>
             <div id="osmd-container"></div>
         </div>
     </div>
