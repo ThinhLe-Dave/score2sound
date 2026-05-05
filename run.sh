@@ -1,68 +1,47 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+VENV_DIR="venv"
+PYTHON_VERSION="python3.11"
+VENV_PYTHON="./$VENV_DIR/bin/python"
+VENV_PIP="./$VENV_DIR/bin/pip"
 
-VENV_PYTHON="$SCRIPT_DIR/venv/bin/python"
-VENV_PIP="$SCRIPT_DIR/venv/bin/pip"
-
+# Resolve Python binary if venv doesn't exist yet
 if [[ ! -x "$VENV_PYTHON" ]]; then
-  if command -v python3 >/dev/null 2>&1; then
+  if command -v $PYTHON_VERSION >/dev/null 2>&1; then
+    VENV_PYTHON="$(command -v $PYTHON_VERSION)"
+  elif command -v python3 >/dev/null 2>&1; then
     VENV_PYTHON="$(command -v python3)"
-  elif command -v python >/dev/null 2>&1; then
-    VENV_PYTHON="$(command -v python)"
   else
-    echo "Error: Python is not installed."
+    echo "Error: Python 3.11+ is required."
     exit 1
   fi
 fi
 
-if [[ ! -x "$VENV_PIP" ]]; then
-  VENV_PIP="$VENV_PYTHON -m pip"
-fi
-
-function print_usage() {
-  cat <<EOF
-Usage: ./run.sh [command]
-
-Commands:
-  install    Create/refresh the virtualenv dependencies
-  serve      Start the FastAPI service (default)
-  test       Run the test suite with pytest
-
-Examples:
-  ./run.sh install
-  ./run.sh serve
-  ./run.sh test
-EOF
-}
-
-COMMAND="${1-serve}"
-
-case "$COMMAND" in
+case "$1" in
   install)
-    echo "Installing dependencies..."
-    "$VENV_PYTHON" -m pip install --upgrade pip
-    "$VENV_PYTHON" -m pip install -r requirements.txt
+    echo "📦 Setting up virtual environment..."
+    $VENV_PYTHON -m venv $VENV_DIR
+    ./$VENV_DIR/bin/pip install --upgrade pip
+    ./$VENV_DIR/bin/pip install -r requirements.txt
     ;;
   test)
-    echo "Running tests..."
-    "$VENV_PYTHON" -m pytest tests
+    echo "🧪 Running pytest suite..."
+    ./$VENV_DIR/bin/python -m pytest tests/
     ;;
   serve)
-    echo "Starting score2sound service..."
-    SSL_CERT_FILE="$($VENV_PYTHON -c 'import certifi; print(certifi.where())')"
-    export SSL_CERT_FILE
+    echo "🚀 Starting FastAPI server..."
+    # macOS SSL workaround for Homr checkpoint downloads
+    export SSL_CERT_FILE="$(./$VENV_DIR/bin/python -m certifi)"
     export REQUESTS_CA_BUNDLE="$SSL_CERT_FILE"
-    exec "$VENV_PYTHON" main.py
-    ;;
-  -*|help|--help)
-    print_usage
+    ./$VENV_DIR/bin/python main.py
     ;;
   *)
-    echo "Error: unknown command '$COMMAND'"
-    print_usage
+    echo "Usage: ./run.sh {install|test|serve}"
+    echo ""
+    echo "Commands:"
+    echo "  install : Create venv and install dependencies"
+    echo "  test    : Run all tests in the tests/ directory"
+    echo "  serve   : Start the local development server (FastAPI)"
     exit 1
     ;;
 esac

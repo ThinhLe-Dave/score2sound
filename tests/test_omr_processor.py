@@ -5,7 +5,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from omr_processor import (
+from omr_engine.omr_processor import (
     OMRProcessingConfig,
     _build_output_path,
     denoise_and_binarize,
