@@ -10,7 +10,7 @@ function create_venv() {
     echo "📦 Creating virtual environment..."
     $VENV_PYTHON -m venv $VENV_DIR
     ./$VENV_DIR/bin/pip install --upgrade pip
-    ./$VENV_DIR/bin/pip install -r requirements.txt
+    ./$VENV_DIR/bin/pip install -r requirements.txt 
   fi
 }
 
@@ -33,7 +33,7 @@ function help() {
   echo ""
   echo "Commands:"
   echo "  install : Create venv and install dependencies"
-  echo "  test    : Run all tests in the tests/ directory"
+  echo "  test [type] : Run tests (types: functional, utils, processor, or a custom path)"
   echo "  serve   : Start the local development server (FastAPI)"
   echo "  help    : Show this help message"
 }
@@ -46,8 +46,16 @@ case "$1" in
     echo "✅ Setup complete! You can now run './run.sh serve' to start the server."
     ;;
   test)
-    echo "🧪 Running pytest suite..."
-    ./$VENV_DIR/bin/python -m pytest tests/
+    case "$2" in
+      functional) TARGET="tests/test_functional.py" ;;
+      utils)      TARGET="tests/test_omr_utils.py" ;;
+      processor)  TARGET="tests/test_omr_processor.py" ;;
+      "")         TARGET="tests/" ;;
+      *)          TARGET="$2" ;;
+    esac
+
+    echo "🧪 Running tests: $TARGET"
+    ./$VENV_DIR/bin/python -m pytest "$TARGET"
     ;;
   serve)
     echo "🚀 Starting FastAPI server..."
