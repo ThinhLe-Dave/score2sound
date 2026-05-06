@@ -19,6 +19,7 @@ class OMRDebugFilenames:
     gray: str = "2_gray.png"
     denoised: str = "3_denoised.png"
     binary: str = "4_binary.png"
+    no_lyrics: str = "4b_no_lyrics.png"
     rotated: str = "5_rotated.png"
     healed: str = "6_healed.png"
     final: str = "7_final.png"
@@ -28,7 +29,7 @@ class OMRDebugFilenames:
 class OMRProcessingConfig:
     """Tunable parameters for score image preprocessing."""
 
-    scale: float = 2.0
+    scale: float = 3.0
     minimal_mode: bool = True
     denoise_h: int = 0
     use_denoise: bool = False
@@ -54,6 +55,10 @@ class OMRProcessingConfig:
     output_extension: str = ".png"
     debug_subdir_name: str = "debug"
     debug_filenames: OMRDebugFilenames = field(default_factory=OMRDebugFilenames)
+    # Text/Lyrics removal parameters
+    remove_text: bool = False
+    text_height_multiplier: float = 2.0
+    text_width_max_ratio: float = 0.08
 
 
 def load_and_resize(image_path: str | Path, *, scale: float) -> np.ndarray:
@@ -91,6 +96,42 @@ def denoise_and_binarize(img: np.ndarray, config: OMRProcessingConfig) -> tuple[
             config.threshold_c,
         )
     return gray, denoised, binary
+
+
+def separate_lyrics(binary_img: np.ndarray, config: OMRProcessingConfig) -> np.ndarray:
+    """
+    Attempts to remove lyrics and small text metadata to prevent OMR misinterpretation.
+    Uses connected components analysis and size-based heuristics.
+    """
+    # Invert for component detection (ink needs to be non-zero)
+    inv = cv2.bitwise_not(binary_img)
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(inv, connectivity=8)
+    
+    if num_labels <= 1:
+        return binary_img
+
+    # Calculate median height of components to use as a baseline for "normal" symbol size
+    heights = stats[1:, cv2.CC_STAT_HEIGHT]
+    med_height = np.median(heights)
+    
+    # Create an empty canvas for the 'cleaned' score (255 = white background)
+    result = np.full_like(binary_img, 255)
+    img_width = binary_img.shape[1]
+    
+    for i in range(1, num_labels):
+        w = stats[i, cv2.CC_STAT_WIDTH]
+        h = stats[i, cv2.CC_STAT_HEIGHT]
+        
+        # Heuristic: Musical symbols (staves, clefs, stems) are either very wide 
+        # or significantly taller than standard text characters.
+        is_musical_symbol = (w > img_width * config.text_width_max_ratio or 
+                            h > med_height * config.text_height_multiplier)
+        
+        if is_musical_symbol:
+            # Keep this component in the final score image
+            result[labels == i] = 0
+            
+    return result
 
 
 def deskew_and_heal(
@@ -182,6 +223,10 @@ def process_score(
         final_output = gray
     else:
         gray, denoised, binary = denoise_and_binarize(resized, config)
+        
+        if config.remove_text:
+            binary = separate_lyrics(binary, config)
+            
         rotated, healed, final_output = deskew_and_heal(binary, config)
 
     output_path = _build_output_path(output_dir, image_path, config)
@@ -195,6 +240,8 @@ def process_score(
         cv2.imwrite(str(debug_dir / dbg.gray), gray)
         cv2.imwrite(str(debug_dir / dbg.denoised), denoised)
         cv2.imwrite(str(debug_dir / dbg.binary), binary)
+        if config.remove_text:
+            cv2.imwrite(str(debug_dir / dbg.no_lyrics), binary)
         cv2.imwrite(str(debug_dir / dbg.rotated), rotated)
         cv2.imwrite(str(debug_dir / dbg.healed), healed)
         cv2.imwrite(str(debug_dir / dbg.final), final_output)

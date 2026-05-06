@@ -11,6 +11,20 @@ const tempoValue = document.getElementById('tempoValue');
 let progressInterval;
 let baseBpm = 120; // Default fallback for MIDI tempo
 
+// Global helper to resume Tone.js on user interaction to satisfy browser autoplay policies
+const resumeToneContext = async () => {
+    if (typeof Tone !== 'undefined' && Tone.context.state !== 'running') {
+        await Tone.start();
+        await Tone.context.resume();
+        Tone.Destination.mute = false;
+        console.log(`[Debug] Tone.js context resumed. State: ${Tone.context.state}`);
+    }
+};
+
+// Listen globally for the first interaction to satisfy strict browser policies
+window.addEventListener('click', resumeToneContext, { once: true });
+window.addEventListener('touchstart', resumeToneContext, { once: true });
+
 // Debug: Monitor global Tone.js volume
 if (typeof Tone !== 'undefined') {
     setInterval(() => {
@@ -57,6 +71,7 @@ function handleFileSelect(file) {
     const reader = new FileReader();
     reader.onload = (e) => {
         imagePreview.src = e.target.result;
+        previewContainer.style.overflow = 'auto';
         previewContainer.style.display = 'block';
     };
     reader.readAsDataURL(file);
@@ -182,17 +197,10 @@ function startProgress() {
 document.getElementById('uploadForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     
-    // Resume Tone.js AudioContext on user interaction to comply with browser policy
-    if (typeof Tone !== 'undefined') {
-        console.log("[Debug] Attempting to start Tone.js...");
-        await Tone.start();
-        await Tone.context.resume();
-        await Tone.getContext().resume();
-        
-        if (Tone.Transport && typeof Tone.Transport._customRate === 'undefined') {
-            Tone.Transport._customRate = 1.0;
-        }
-        console.log("[Debug] Tone state after start/resume:", Tone.context.state);
+    // Ensure Tone is started on form submission (user action)
+    await resumeToneContext();
+    if (typeof Tone !== 'undefined' && Tone.Transport && typeof Tone.Transport._customRate === 'undefined') {
+        Tone.Transport._customRate = 1.0;
     }
 
     if (!fileInput.files.length) return;
@@ -228,6 +236,7 @@ document.getElementById('uploadForm').addEventListener('submit', async function(
         // Show results before rendering to ensure container width is detected correctly
         document.getElementById('loading').style.display = 'none';
         document.getElementById('result').style.display = 'block';
+
         initPlayback(data.musicxml_url, data.midi_url);
         
         // Enable/disable buttons based on available files
@@ -251,13 +260,14 @@ const player = document.getElementById('midiPlayer');
 // CRITICAL: Listen for interaction on the player itself to resume AudioContext.
 // Browsers often require the gesture to be on the actual playing element or its container.
 const resumeAudio = async () => {
-    if (Tone.context.state !== 'running' || Tone.context.state === 'interrupted') {
-        await Tone.start();
-        await Tone.context.resume();
-        if (typeof player.resumeAudioContext === 'function') {
-            await player.resumeAudioContext();
-        }
-        console.log(`[Debug] AudioContext resumed via Interaction (${Tone.context.state})`);
+    await resumeToneContext();
+    if (typeof player.resumeAudioContext === 'function') {
+        await player.resumeAudioContext();
+    }
+    // Force destination to be active
+    if (typeof Tone !== 'undefined') {
+        Tone.Destination.mute = false;
+        if (Tone.Destination.volume.value < -80) Tone.Destination.volume.value = 0;
     }
 };
 
@@ -268,20 +278,24 @@ player.addEventListener('start', (e) => {
     // Inspect the note sequence being played
     console.log("[Debug] Note Sequence Object:", player.noteSequence);
 
+    // Force unmute and resume on every start event
+    if (typeof Tone !== 'undefined') {
+        Tone.Destination.mute = false;
+        if (Tone.context.state !== 'running') Tone.context.resume();
+    }
+
     // Capture the base BPM set by Magenta for this MIDI and apply current multiplier
     if (Tone.Transport && Tone.Transport.bpm) {
         // Small delay to let Magenta finish its internal start logic which often resets BPM
         setTimeout(() => {
             // Magenta sets the Transport BPM when it starts a sequence based on MIDI metadata
-            baseBpm = Tone.Transport.bpm.value;
+            const detectedBpm = Tone.Transport.bpm.value;
+            if (detectedBpm > 0) baseBpm = detectedBpm;
+            
             const multiplier = parseFloat(tempoSlider.value) / 100;
             Tone.Transport._customRate = parseFloat(multiplier);
             Tone.Transport.bpm.value = baseBpm * multiplier;
             console.log(`[Debug] Base BPM captured: ${baseBpm.toFixed(1)} | Adjusted BPM: ${Tone.Transport.bpm.value.toFixed(1)}`);
-            
-            if (Tone.context.state !== 'running') {
-                Tone.context.resume();
-            }
         }, 50);
     }
     

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import certifi
 from music21 import converter, midi
-from .omr_processor import process_score
+from .omr_processor import process_score, OMRProcessingConfig
 
 
 async def process_full_pipeline(upload_file, upload_dir, output_dir):
@@ -23,8 +23,11 @@ async def process_full_pipeline(upload_file, upload_dir, output_dir):
         mxl_path, req_out_dir = run_omr_engine(temp_raw_path, file_stem, output_dir)
         
         if not mxl_path:
-            print(f"⚠️ Pass 1 failed. Refining image...")
-            cleaned_path = process_score(str(temp_raw_path), debug=True) 
+            # Pass 2: Refined image. Use aggressive cleaning and lyrics separation.
+            # We disable minimal_mode to allow binarization and morphological filtering.
+            refine_config = OMRProcessingConfig(minimal_mode=False, remove_text=True)
+            cleaned_path = process_score(str(temp_raw_path), config=refine_config, debug=True) 
+            print(f"🔄 Pass 2: Refined image OMR...")
             mxl_path, req_out_dir = run_omr_engine(Path(cleaned_path), f"{file_stem}_refined", output_dir)
 
         if not mxl_path or not Path(mxl_path).exists():
@@ -32,13 +35,16 @@ async def process_full_pipeline(upload_file, upload_dir, output_dir):
 
         midi_path = convert_musicxml_to_midi(str(mxl_path), req_out_dir, file_stem)
         
+        print(f"✅ [Debug] Pipeline complete for {file_stem}. MusicXML: {mxl_path}, MIDI created: {midi_path is not None}")
         return {
             "stem": file_stem,
+            "processed_stem": f"{file_stem}_refined" if cleaned_path else file_stem,
             "mxl_path": str(mxl_path),
             "midi_created": midi_path is not None
         }
 
     finally:
+        print(f"🧹 [Debug] Cleaning up temporary files.")
         _cleanup_files([temp_raw_path, cleaned_path])
 
 
@@ -53,6 +59,7 @@ def _cleanup_files(paths):
 def run_omr_engine(input_image_path, file_stem, output_dir):
     request_output_dir = output_dir / file_stem
     request_output_dir.mkdir(exist_ok=True, parents=True)
+    print(f"📁 [Debug] OMR output directory: {request_output_dir}")
 
     input_image_path = Path(input_image_path).resolve()
     image_in_output = request_output_dir / input_image_path.name
@@ -65,9 +72,12 @@ def run_omr_engine(input_image_path, file_stem, output_dir):
     env.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
     venv_bin = Path(sys.executable).parent
     env["PATH"] = f"{venv_bin}:{env.get('PATH', '')}"
-
+    
     result = subprocess.run(command, capture_output=True, text=True, env=env)
     if result.returncode != 0:
+        print(f"❌ [Debug] OMR engine failed with return code {result.returncode}.")
+        print(f"   STDOUT: {result.stdout}")
+        print(f"   STDERR: {result.stderr}")
         return None, None
 
     musicxml_files = sorted(
@@ -76,6 +86,7 @@ def run_omr_engine(input_image_path, file_stem, output_dir):
         reverse=True,
     )
     if not musicxml_files:
+        print(f"🔄 [Debug] No .musicxml files found, falling back to .xml search.")
         musicxml_files = sorted(
             request_output_dir.glob("**/*.xml"),
             key=lambda p: p.stat().st_mtime,
@@ -83,18 +94,20 @@ def run_omr_engine(input_image_path, file_stem, output_dir):
         )
 
     if not musicxml_files:
+        print(f"🔍 [Debug] No MusicXML files found in {request_output_dir}.")
         return None, None
-
+    print(f"🎶 [Debug] Found MusicXML file: {musicxml_files[0]}")
     return musicxml_files[0], request_output_dir
 
 
 def convert_musicxml_to_midi(musicxml_path, output_dir, file_stem):
     try:
+        print(f"🎼 [Debug] Converting MusicXML to MIDI: {musicxml_path}")
         score = converter.parse(musicxml_path)
-        # Debug: Check if the score actually contains notes
-        all_notes = score.flatten().notes
-        print(f"📊 [Debug] MIDI Conversion: Found {len(all_notes)} total note objects.")
-        
+
+        # Log time signature information
+        time_signatures = score.recurse().getElementsByClass('TimeSignature')
+
         # Log track information
         for i, part in enumerate(score.parts):
             print(f"   Track {i} ({part.partName}): {len(part.flatten().notes)} notes")
@@ -106,7 +119,7 @@ def convert_musicxml_to_midi(musicxml_path, output_dir, file_stem):
         mf.close()
         return midi_path
     except Exception as e:
-        print(f"Error converting to MIDI: {e}")
+        print(f"❌ [Debug] Error converting to MIDI: {e}", file=sys.stderr)
         return None
 
 

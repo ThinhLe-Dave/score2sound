@@ -50,6 +50,7 @@ async def handle_process_score(file: UploadFile = File(...)):
         return JSONResponse({
             "musicxml_url": f"/download/musicxml/{result['stem']}",
             "midi_url": f"/download/midi/{result['stem']}" if result['midi_created'] else None,
+            "processed_image_url": f"/download/image/{result['processed_stem']}",
             "filename": result['stem']
         })
 
@@ -84,6 +85,21 @@ async def download_midi(file_stem: str):
         )
     
     raise HTTPException(status_code=404, detail="MIDI file not found")
+
+@app.get("/download/image/{file_stem}")
+async def download_image(file_stem: str):
+    """View/Download the processed image used for OMR."""
+    image_file = find_file_in_output_dir(OUTPUT_DIR, file_stem, "png")
+    if not image_file:
+         image_file = find_file_in_output_dir(OUTPUT_DIR, file_stem, "jpg")
+    
+    if image_file:
+        return FileResponse(
+            path=str(image_file),
+            media_type='image/png'
+        )
+    
+    raise HTTPException(status_code=404, detail="Processed image not found")
 
 # This block starts the local server
 if __name__ == "__main__":
