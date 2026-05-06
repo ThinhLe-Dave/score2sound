@@ -21,6 +21,7 @@ def test_handle_process_score_success(mock_process):
     # Mock the return value of the pipeline service
     mock_process.return_value = {
         "stem": "test_score",
+        "processed_stem": "test_score",
         "mxl_path": "/fake/path/test_score.musicxml",
         "midi_created": True
     }
