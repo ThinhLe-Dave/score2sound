@@ -19,19 +19,18 @@ async def process_full_pipeline(upload_file, upload_dir, output_dir):
         shutil.copyfileobj(upload_file.file, buffer)
 
     try:
+        # Pass 1: Raw image OMR
         print(f"🔄 Pass 1: Raw image OMR...")
         mxl_path, req_out_dir = run_omr_engine(temp_raw_path, file_stem, output_dir)
         
-        if not mxl_path:
-            # Pass 2: Refined image. Use aggressive cleaning and lyrics separation.
-            # We disable minimal_mode to allow binarization and morphological filtering.
-            refine_config = OMRProcessingConfig(minimal_mode=False, remove_text=True)
-            cleaned_path = process_score(str(temp_raw_path), config=refine_config, debug=True) 
-            print(f"🔄 Pass 2: Refined image OMR...")
+        # If Pass 1 fails to produce MusicXML, try Pass 2 with tab removal
+        if not mxl_path or not mxl_path.exists():
+            print(f"⚠️ Pass 1 failed. Attempting Pass 2 with tab removal...")
+            cleaned_path = process_score(str(temp_raw_path), config=OMRProcessingConfig(remove_tabs=True), debug=True)
             mxl_path, req_out_dir = run_omr_engine(Path(cleaned_path), f"{file_stem}_refined", output_dir)
-
-        if not mxl_path or not Path(mxl_path).exists():
-            raise FileNotFoundError("OMR Engine failed to produce MusicXML on both passes.")
+            
+            if not mxl_path or not mxl_path.exists():
+                raise FileNotFoundError("OMR Engine failed to produce MusicXML on both passes.")
 
         midi_path = convert_musicxml_to_midi(str(mxl_path), req_out_dir, file_stem)
         
@@ -104,6 +103,15 @@ def convert_musicxml_to_midi(musicxml_path, output_dir, file_stem):
     try:
         print(f"🎼 [Debug] Converting MusicXML to MIDI: {musicxml_path}")
         score = converter.parse(musicxml_path)
+
+        # Force all instruments to Piano (MIDI Program 0) for reliable web playback
+        # as web soundfonts often lack complete General MIDI patch sets (like Voice).
+        from music21 import instrument
+        for part in score.parts:
+            for inst in part.recurse().getElementsByClass(instrument.Instrument):
+                inst.midiProgram = 0
+            if not part.getInstruments():
+                part.insert(0, instrument.Piano())
 
         # Log time signature information
         time_signatures = score.recurse().getElementsByClass('TimeSignature')

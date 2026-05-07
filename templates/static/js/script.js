@@ -11,19 +11,54 @@ const tempoValue = document.getElementById('tempoValue');
 let progressInterval;
 let baseBpm = 120; // Default fallback for MIDI tempo
 
-// Global helper to resume Tone.js on user interaction to satisfy browser autoplay policies
-const resumeToneContext = async () => {
-    if (typeof Tone !== 'undefined' && Tone.context.state !== 'running') {
-        await Tone.start();
-        await Tone.context.resume();
-        Tone.Destination.mute = false;
-        console.log(`[Debug] Tone.js context resumed. State: ${Tone.context.state}`);
+// Monitor state changes and update UI
+const updateAudioStatusUI = () => {
+    if (typeof Tone !== 'undefined' && Tone.context) {
+        const state = Tone.context.state;
+        const statusEl = document.getElementById('audioStatus');
+        if (statusEl) {
+            statusEl.className = `audio-status ${state}`;
+            const textEl = statusEl.querySelector('.status-text');
+            if (textEl) textEl.textContent = `Audio: ${state.charAt(0).toUpperCase() + state.slice(1)}`;
+        }
     }
 };
 
-// Listen globally for the first interaction to satisfy strict browser policies
-window.addEventListener('click', resumeToneContext, { once: true });
-window.addEventListener('touchstart', resumeToneContext, { once: true });
+if (typeof Tone !== 'undefined' && Tone.context) {
+    Tone.context.on('statechange', updateAudioStatusUI);
+    // Initial check
+    updateAudioStatusUI();
+}
+
+// Global helper to resume Tone.js on user interaction to satisfy browser autoplay policies
+const resumeToneContext = async () => {
+    if (typeof Tone !== 'undefined') {
+        const state = Tone.context.state;
+        if (state !== 'running') {
+            console.log(`[Debug] Attempting to resume Tone.js from state: ${state}`);
+            try {
+                await Tone.start();
+                await Tone.context.resume();
+                Tone.Destination.mute = false;
+                console.log(`[Debug] Tone.js context resume result: ${Tone.context.state}`);
+                updateAudioStatusUI();
+            } catch (err) {
+                console.error("[Debug] Failed to resume Tone.js context:", err);
+            }
+        }
+    }
+};
+
+// Allow clicking the status indicator to manually fix audio
+const audioStatusBtn = document.getElementById('audioStatus');
+if (audioStatusBtn) {
+    audioStatusBtn.addEventListener('click', resumeToneContext);
+}
+
+// Listen globally for interaction to satisfy strict browser policies
+['click', 'mousedown', 'touchstart', 'keydown'].forEach(type => {
+    window.addEventListener(type, resumeToneContext, { once: true });
+});
 
 // Debug: Monitor global Tone.js volume
 if (typeof Tone !== 'undefined') {
@@ -35,6 +70,8 @@ if (typeof Tone !== 'undefined') {
             const playRate = (Tone.Transport && typeof Tone.Transport._customRate === 'number')
                 ? Tone.Transport._customRate.toFixed(2)
                 : '1.00';
+            // Also update UI here as a fallback
+            updateAudioStatusUI();
             console.log(`[Debug] Volume: ${Tone.Destination.volume.value}dB | Tone State: ${Tone.context.state} | Transport BPM: ${transportBPM} | Rate: ${playRate}x`);
         }
     }, 5000);
@@ -260,18 +297,26 @@ const player = document.getElementById('midiPlayer');
 // CRITICAL: Listen for interaction on the player itself to resume AudioContext.
 // Browsers often require the gesture to be on the actual playing element or its container.
 const resumeAudio = async () => {
+    console.log("[Debug] User interaction detected on player. Resuming context...");
     await resumeToneContext();
     if (typeof player.resumeAudioContext === 'function') {
-        await player.resumeAudioContext();
+        try {
+            await player.resumeAudioContext();
+        } catch (e) {
+            console.warn("[Debug] player.resumeAudioContext() failed:", e);
+        }
     }
-    // Force destination to be active
+    // Force destination to be active and unmuted
     if (typeof Tone !== 'undefined') {
         Tone.Destination.mute = false;
         if (Tone.Destination.volume.value < -80) Tone.Destination.volume.value = 0;
+        if (Tone.context.state !== 'running') {
+            await Tone.context.resume();
+        }
     }
 };
 
-['pointerdown', 'click', 'touchstart'].forEach(type => player.addEventListener(type, resumeAudio));
+['pointerdown', 'click', 'touchstart', 'mousedown'].forEach(type => player.addEventListener(type, resumeAudio));
 
 player.addEventListener('load', () => console.log("[Debug] MIDI Player successfully loaded the source."));
 player.addEventListener('start', (e) => {

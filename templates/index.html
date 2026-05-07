@@ -8,12 +8,18 @@
     <script src="https://unpkg.com/opensheetmusicdisplay@latest/build/opensheetmusicdisplay.min.js"></script>
     <!-- MIDI Player Library (Tone.js + Magenta + HTML MIDI Player) -->
     <script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/html-midi-player@1.5.0"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+    <div class="bg-glow"></div>
     <div class="container">
+        <div id="audioStatus" class="audio-status" title="Audio Context Status">
+            <span class="status-icon"></span>
+            <span class="status-text">Audio: Suspended</span>
+        </div>
         <h1>🎵 Score2Sound</h1>
-        <p class="subtitle">Convert sheet music images to digital audio and MusicXML</p>
+        <p class="subtitle">Convert sheet music to digital audio & MusicXML</p>
         
         <form id="uploadForm" enctype="multipart/form-data">
             <div class="drop-zone" id="dropZone">
