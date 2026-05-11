@@ -49,10 +49,8 @@ async def process_full_pipeline(upload_file, upload_dir, output_dir):
 
 def _cleanup_files(paths):
     for p in paths:
-        if p:
-            path_obj = Path(p)
-            if path_obj.exists():
-                os.remove(path_obj)
+        if p and (path_obj := Path(p)).exists():
+            path_obj.unlink()
 
 
 def run_omr_engine(input_image_path, file_stem, output_dir):
@@ -135,6 +133,6 @@ def find_file_in_output_dir(output_dir, file_stem, extension):
     for subdir in output_dir.iterdir():
         if subdir.is_dir():
             files = list(subdir.glob(f"*.{extension}"))
-            if files and file_stem in str(files[0]):
-                return files[0]
+            if files and any(f.stem == file_stem or f.stem == f"{file_stem}_refined" for f in files):
+                return next((f for f in files if f.stem in [file_stem, f"{file_stem}_refined"]), files[0])
     return None

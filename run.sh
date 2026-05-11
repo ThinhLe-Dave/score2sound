@@ -7,19 +7,20 @@ VENV_PIP="./$VENV_DIR/bin/pip"
 
 function create_venv() {
   if [[ ! -d "$VENV_DIR" ]]; then
+    resolve_python
     echo "📦 Creating virtual environment..."
-    $VENV_PYTHON -m venv $VENV_DIR
+    $SYSTEM_PYTHON -m venv $VENV_DIR
     ./$VENV_DIR/bin/pip install --upgrade pip
-    ./$VENV_DIR/bin/pip install -r requirements.txt 
+    ./$VENV_DIR/bin/pip install -r requirements.txt
   fi
 }
 
 function resolve_python() {
   if [[ ! -x "$VENV_PYTHON" ]]; then
     if command -v $PYTHON_VERSION >/dev/null 2>&1; then
-      VENV_PYTHON="$(command -v $PYTHON_VERSION)"
+      SYSTEM_PYTHON="$(command -v $PYTHON_VERSION)"
     elif command -v python3 >/dev/null 2>&1; then
-      VENV_PYTHON="$(command -v python3)"
+      SYSTEM_PYTHON="$(command -v python3)"
     else
       echo "Error: Python 3.11+ is required."
       exit 1

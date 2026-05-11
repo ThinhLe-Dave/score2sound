@@ -34,6 +34,7 @@ app.mount("/static", StaticFiles(directory="templates/static"), name="static")
 async def read_root():
     with open("templates/index.html", "r") as f:
         return f.read()
+    return FileResponse("templates/index.html")
 
 
 @app.post("/process-score")
