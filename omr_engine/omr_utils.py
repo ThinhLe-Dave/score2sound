@@ -10,42 +10,38 @@ from .omr_processor import process_score, OMRProcessingConfig
 
 
 async def process_full_pipeline(upload_file, upload_dir, output_dir):
-    """Service logic to orchestrate the OMR process (Raw Pass -> Refined Pass)."""
+    """Service logic to orchestrate the OMR process (Always refine before engine)."""
     file_stem = Path(upload_file.filename).stem
     temp_raw_path = upload_dir / upload_file.filename
-    cleaned_path = None
     
     with open(temp_raw_path, "wb") as buffer:
         shutil.copyfileobj(upload_file.file, buffer)
 
+    cleaned_path = None
     try:
-        # Pass 1: Raw image OMR
-        print(f"🔄 Pass 1: Raw image OMR...")
-        mxl_path, req_out_dir = run_omr_engine(temp_raw_path, file_stem, output_dir)
+        # Step 1: Image Processing (Tab removal, etc.)
+        print(f"🔄 Processing score image (refinement)...")
+        cleaned_path = process_score(str(temp_raw_path), config=OMRProcessingConfig(remove_tabs=True), debug=False)
         
-        # If Pass 1 fails to produce MusicXML, try Pass 2 with tab removal
+        # Step 2: Run OMR Engine on the processed image
+        print(f"🎹 Running OMR engine...")
+        mxl_path, req_out_dir = run_omr_engine(Path(cleaned_path), file_stem, output_dir)
+        
         if not mxl_path or not mxl_path.exists():
-            print(f"⚠️ Pass 1 failed. Attempting Pass 2 with tab removal...")
-            cleaned_path = process_score(str(temp_raw_path), config=OMRProcessingConfig(remove_tabs=True), debug=True)
-            mxl_path, req_out_dir = run_omr_engine(Path(cleaned_path), f"{file_stem}_refined", output_dir)
-            
-            if not mxl_path or not mxl_path.exists():
-                raise FileNotFoundError("OMR Engine failed to produce MusicXML on both passes.")
+            raise FileNotFoundError("OMR Engine failed to produce MusicXML.")
 
         midi_path = convert_musicxml_to_midi(str(mxl_path), req_out_dir, file_stem)
         
         print(f"✅ [Debug] Pipeline complete for {file_stem}. MusicXML: {mxl_path}, MIDI created: {midi_path is not None}")
         return {
             "stem": file_stem,
-            "processed_stem": f"{file_stem}_refined" if cleaned_path else file_stem,
+            "processed_stem": Path(cleaned_path).stem,
             "mxl_path": str(mxl_path),
             "midi_created": midi_path is not None
         }
 
     finally:
-        print(f"🧹 [Debug] Cleaning up temporary files.")
         _cleanup_files([temp_raw_path, cleaned_path])
-
 
 def _cleanup_files(paths):
     for p in paths:
@@ -133,6 +129,13 @@ def find_file_in_output_dir(output_dir, file_stem, extension):
     for subdir in output_dir.iterdir():
         if subdir.is_dir():
             files = list(subdir.glob(f"*.{extension}"))
-            if files and any(f.stem == file_stem or f.stem == f"{file_stem}_refined" for f in files):
-                return next((f for f in files if f.stem in [file_stem, f"{file_stem}_refined"]), files[0])
+            if files:
+                # Prefer exact match, then variants, then first found
+                targets = [file_stem, f"{file_stem}_refined", f"{file_stem}_cleaned"]
+                for t in targets:
+                    for f in files:
+                        if f.stem == t:
+                            return f
+                if any(t in f.stem for t in targets for f in files):
+                    return files[0]
     return None

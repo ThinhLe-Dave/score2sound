@@ -65,9 +65,9 @@ class TestOmrUtils(unittest.IsolatedAsyncioTestCase):
 
         # Simulate the creation of output files by the OMR engine in the correct subdirectory
         stem = "my_sheet_music"
-        refined_dir = self.output_dir / f"{stem}_refined"
-        refined_dir.mkdir()
-        (refined_dir / f"{stem}_refined.musicxml").touch()
+        output_request_dir = self.output_dir / stem
+        output_request_dir.mkdir()
+        (output_request_dir / f"{stem}.musicxml").touch()
 
         # Execute the pipeline
         result = await process_full_pipeline(file, self.upload_dir, self.output_dir)
@@ -76,9 +76,10 @@ class TestOmrUtils(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["stem"], stem)
         self.assertTrue(result["midi_created"])
         
-        # Verify internal calls
-        mock_process_score.assert_called_once()
-        mock_run.assert_called()
+        # Verify internal calls: process_score is now always called first, followed by run_omr_engine
+        mock_process_score.assert_called_once_with(str(self.upload_dir / filename), config=unittest.mock.ANY, debug=True)
+        # run_omr_engine (which calls subprocess.run) should be called once with the cleaned file
+        mock_run.assert_called_once()
 
     @patch("omr_engine.omr_utils.process_score")
     @patch("subprocess.run")
