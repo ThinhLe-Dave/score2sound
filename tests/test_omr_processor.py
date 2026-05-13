@@ -61,8 +61,9 @@ class TestOmrProcessor(unittest.TestCase):
     def test_remove_regions_from_image(self):
         img = np.zeros((100, 100), dtype=np.uint8)
         regions = [(10, 30)]
-        result = _remove_regions_from_image(img, regions)
-        self.assertEqual(result[20, 50], 255) # Area should be wiped (255)
+        config = OMRProcessingConfig()
+        result = _remove_regions_from_image(img, regions, config)
+        self.assertEqual(result[20, 50], config.pixel_white) # Area should be wiped (255)
         self.assertEqual(result[5, 50], 0)   # Outside area remains 0
 
     def test_remove_guitar_tabs(self):

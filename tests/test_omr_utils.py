@@ -77,7 +77,7 @@ class TestOmrUtils(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["midi_created"])
         
         # Verify internal calls: process_score is now always called first, followed by run_omr_engine
-        mock_process_score.assert_called_once_with(str(self.upload_dir / filename), config=unittest.mock.ANY, debug=True)
+        mock_process_score.assert_called_once_with(str(self.upload_dir / filename), config=unittest.mock.ANY, debug=False)
         # run_omr_engine (which calls subprocess.run) should be called once with the cleaned file
         mock_run.assert_called_once()
 
