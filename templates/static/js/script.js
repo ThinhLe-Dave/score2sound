@@ -33,18 +33,28 @@ if (typeof Tone !== 'undefined' && Tone.context) {
 // Global helper to resume Tone.js on user interaction to satisfy browser autoplay policies
 const resumeToneContext = async () => {
     if (typeof Tone !== 'undefined') {
-        const state = Tone.context.state;
-        if (state !== 'running') {
-            console.log(`[Debug] Attempting to resume Tone.js from state: ${state}`);
-            try {
-                await Tone.start();
+        try {
+            // Always call Tone.start() on user gesture for Safari
+            await Tone.start();
+            
+            if (Tone.context.state !== 'running') {
+                console.log(`[Debug] Attempting to resume Tone.js from state: ${Tone.context.state}`);
                 await Tone.context.resume();
-                Tone.Destination.mute = false;
-                console.log(`[Debug] Tone.js context resume result: ${Tone.context.state}`);
-                updateAudioStatusUI();
-            } catch (err) {
-                console.error("[Debug] Failed to resume Tone.js context:", err);
             }
+
+            // Safari-specific "poke": Play a tiny silent note to unlock the hardware output
+            const osc = Tone.context.createOscillator();
+            const silentGain = Tone.context.createGain();
+            silentGain.gain.value = 0;
+            osc.connect(silentGain);
+            silentGain.connect(Tone.context.destination);
+            osc.start(0);
+            osc.stop(0.1);
+
+            Tone.Destination.mute = false;
+            updateAudioStatusUI();
+        } catch (err) {
+                console.error("[Debug] Failed to resume Tone.js context:", err);
         }
     }
 };
@@ -56,7 +66,7 @@ if (audioStatusBtn) {
 }
 
 // Listen globally for interaction to satisfy strict browser policies
-['click', 'mousedown', 'touchstart', 'keydown'].forEach(type => {
+['click', 'mousedown', 'touchstart', 'touchend', 'keydown'].forEach(type => {
     window.addEventListener(type, resumeToneContext, { once: true });
 });
 
@@ -316,7 +326,7 @@ const resumeAudio = async () => {
     }
 };
 
-['pointerdown', 'click', 'touchstart', 'mousedown'].forEach(type => player.addEventListener(type, resumeAudio));
+['pointerdown', 'click', 'touchstart', 'touchend', 'mousedown'].forEach(type => player.addEventListener(type, resumeAudio));
 
 player.addEventListener('load', () => console.log("[Debug] MIDI Player successfully loaded the source."));
 player.addEventListener('start', (e) => {
