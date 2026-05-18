@@ -6,7 +6,8 @@ from pathlib import Path
 
 import certifi
 from music21 import converter, midi
-from .omr_processor import process_score, OMRProcessingConfig
+from .omr_processor import process_score
+from .tab_removal import OMRProcessingConfig
 
 
 async def process_full_pipeline(upload_file, upload_dir, output_dir):

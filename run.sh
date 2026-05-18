@@ -52,6 +52,7 @@ case "$1" in
       utils)      TARGET="tests/test_omr_utils.py" ;;
       processor)  TARGET="tests/test_omr_processor.py" ;;
       image)      TARGET="tests/test_image_quality.py" ;;
+      tab_removal) TARGET="tests/test_tab_removal.py" ;;
       "")         TARGET="tests/" ;;
       *)          TARGET="$2" ;;
     esac
