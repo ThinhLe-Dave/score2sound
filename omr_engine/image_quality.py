@@ -71,6 +71,39 @@ def enhance_brightness(gray_img: np.ndarray) -> np.ndarray:
     """Increases brightness using histogram equalization."""
     return cv2.equalizeHist(gray_img)
 
+def enhance_image_quality(image_path: str):
+    """Enhances the image quality by applying sharpening, contrast, and brightness adjustments."""
+    path = Path(image_path)
+    if not path.exists():
+        return {"error": f"File {image_path} not found."}
+
+    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        return {"error": "Could not decode image."}
+
+    # Apply enhancements
+    if assess_image_quality(image_path).get("flags", {}).get("is_blurry", False):
+        print("Image is blurry. Applying sharpening filter.")
+        img = fix_blurry_image(img)
+
+    if assess_image_quality(image_path).get("flags", {}).get("is_low_contrast", False):
+        print("Image has low contrast. Applying enhancement.")
+        img = enhance_contrast(img)
+
+    if assess_image_quality(image_path).get("flags", {}).get("is_too_dark", False) or assess_image_quality(image_path).get("flags", {}).get("is_too_light", False):
+        print("Image brightness needs adjustment.")
+        img = enhance_brightness(img)
+
+    # Save the enhanced image (optional)
+    enhanced_path = path.with_name(f"{path.stem}_enhanced{path.suffix}")
+    cv2.imwrite(str(enhanced_path), img)
+
+    return {
+        "original_image": str(path),
+        "enhanced_image": str(enhanced_path),
+        "message": "Image quality enhanced and saved."
+    }
+
 if __name__ == "__main__":
     import sys
     import json
