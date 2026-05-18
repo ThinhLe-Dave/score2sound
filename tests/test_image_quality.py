@@ -83,7 +83,7 @@ class TestImageQuality(unittest.TestCase):
     def test_dark_and_light_detection(self):
         """Test extreme brightness values."""
         # Very dark image
-        dark_img = np.full((100, 100), 5, dtype=np.uint8)
+        dark_img = np.full((100, 100), 20, dtype=np.uint8)
         dark_path = self.create_dummy_image("dark.png", dark_img)
         dark_res = assess_image_quality(dark_path)
         self.assertTrue(dark_res["flags"]["is_too_dark"])
