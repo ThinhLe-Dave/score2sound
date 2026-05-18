@@ -31,11 +31,12 @@ def assess_image_quality(image_path: str):
     height, width = img.shape
 
     # Basic thresholding for recommendations
-    # These values are empirical and might need tuning for specific OMR engines
-    is_blurry = sharpness < 100
-    is_too_dark = brightness < 40
-    is_too_light = brightness > 220
-    is_low_contrast = contrast < 30
+    # Adjusted for sheet music: mostly white background with black ink.
+    # A typical clear scan has brightness > 200 and high contrast.
+    is_blurry = sharpness < 100        # Variance of Laplacian
+    is_too_dark = brightness < 30      # Heavy shadows or underexposure
+    is_too_light = brightness > 250    # Nearly blank or washed out
+    is_low_contrast = contrast < 20    # Flat image (e.g., light gray on dark gray)
 
     return {
         "filename": path.name,

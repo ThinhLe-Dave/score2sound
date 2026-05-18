@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 from dataclasses import dataclass
+from .image_quality import assess_image_quality
 
 @dataclass
 class OMRProcessingConfig:
@@ -137,6 +138,7 @@ def remove_guitar_tabs(binary_img: np.ndarray, gray_img: np.ndarray, config: OMR
 
 #endregion
 
+
 def process_score(
     image_path: str | Path,
     config: OMRProcessingConfig | None = None,
@@ -149,6 +151,13 @@ def process_score(
     img = cv2.imread(str(image_path))
     if img is None:
         raise FileNotFoundError(f"Could not load image at {image_path}")
+    
+    # Assess image quality before processing
+    quality_report = assess_image_quality(str(image_path))
+    if quality_report.get("quality_score") == "Fail":
+        print(f"⚠️ Warning: Image quality check failed for {image_stem}: {quality_report['flags']}")
+    print(f"✅ Image quality report for {image_stem}: {quality_report}")
+
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 

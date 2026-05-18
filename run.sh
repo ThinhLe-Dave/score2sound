@@ -34,7 +34,7 @@ function help() {
   echo ""
   echo "Commands:"
   echo "  install : Create venv and install dependencies"
-  echo "  test [type] : Run tests (types: functional, utils, processor, or a custom path)"
+  echo "  test [type] : Run tests (types: functional, utils, processor, image or a custom path)"
   echo "  serve   : Start the local development server (FastAPI)"
   echo "  help    : Show this help message"
 }
@@ -51,6 +51,7 @@ case "$1" in
       functional) TARGET="tests/test_functional.py" ;;
       utils)      TARGET="tests/test_omr_utils.py" ;;
       processor)  TARGET="tests/test_omr_processor.py" ;;
+      image)      TARGET="tests/test_image_quality.py" ;;
       "")         TARGET="tests/" ;;
       *)          TARGET="$2" ;;
     esac
