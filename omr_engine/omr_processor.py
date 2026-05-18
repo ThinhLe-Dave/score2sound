@@ -2,6 +2,13 @@ import cv2
 import numpy as np
 from pathlib import Path
 from dataclasses import dataclass
+from .image_quality import (
+    assess_image_quality,
+    fix_blurry_image,
+    enhance_contrast,
+    enhance_brightness
+)
+
 
 @dataclass
 class OMRProcessingConfig:
@@ -137,6 +144,7 @@ def remove_guitar_tabs(binary_img: np.ndarray, gray_img: np.ndarray, config: OMR
 
 #endregion
 
+
 def process_score(
     image_path: str | Path,
     config: OMRProcessingConfig | None = None,
@@ -149,8 +157,28 @@ def process_score(
     img = cv2.imread(str(image_path))
     if img is None:
         raise FileNotFoundError(f"Could not load image at {image_path}")
+    
+    # Ensure the image is grayscale safely before quality assessment and processing
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # Assess image quality before processing
+    quality_report = assess_image_quality(str(image_path))
+    match quality_report.get("flags", {}):
+        case {"is_blurry": True}:
+            print(f"⚠️ [Warning] Image {image_path} is blurry (sharpness={quality_report['metrics']['sharpness']}). Attempting to fix...")
+            gray = fix_blurry_image(gray)
+        case {"is_too_dark": True}:
+            print(f"⚠️ [Warning] Image {image_path} is too dark (brightness={quality_report['metrics']['brightness']}). Attempting to fix...")
+            gray = enhance_brightness(gray)
+        case {"is_too_light": True}:
+            print(f"⚠️ [Warning] Image {image_path} is too light (brightness={quality_report['metrics']['brightness']}). Attempting to fix...")
+            gray = enhance_brightness(gray)
+        case {"is_low_contrast": True}:
+            print(f"⚠️ [Warning] Image {image_path} has low contrast (contrast={quality_report['metrics']['contrast']}). Attempting to fix...")
+            gray = enhance_contrast(gray)
+        case _:
+            print(f"✅ Image {image_path} passed quality checks. Sharpness={quality_report['metrics']['sharpness']}, Brightness={quality_report['metrics']['brightness']}, Contrast={quality_report['metrics']['contrast']}.")
+            pass
 
     # Use adaptive thresholding for the main binary image.
     # Global Otsu thresholding often destroys thin staff lines in notation staves.
