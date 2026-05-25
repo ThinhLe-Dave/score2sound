@@ -29,17 +29,16 @@ app.add_middleware(
 
 app.mount("/static", StaticFiles(directory="templates/static"), name="static")
 
-
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 async def read_root():
-    with open("templates/index.html", "r") as f:
-        return f.read()
+    """Serves the main frontend page efficiently using FileResponse."""
     return FileResponse("templates/index.html")
 
 
 @app.post("/process-score")
 async def handle_process_score(file: UploadFile = File(...)):
     """API endpoint with fallback image refinement logic."""
+    print(f"📥 [Debug] Received upload request: {file.filename} (ContentType: {file.content_type})")
     try:
         # Delegate core logic to the service layer
         result = await process_full_pipeline(

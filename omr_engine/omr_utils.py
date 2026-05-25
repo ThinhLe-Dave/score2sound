@@ -1,3 +1,4 @@
+import asyncio
 import os
 import shutil
 import subprocess
@@ -15,6 +16,7 @@ async def process_full_pipeline(upload_file, upload_dir, output_dir):
     file_stem = Path(upload_file.filename).stem
     temp_raw_path = upload_dir / upload_file.filename
     
+    print(f"📂 [Debug] Saving uploaded file to: {temp_raw_path}")
     with open(temp_raw_path, "wb") as buffer:
         shutil.copyfileobj(upload_file.file, buffer)
 
@@ -22,16 +24,22 @@ async def process_full_pipeline(upload_file, upload_dir, output_dir):
     try:
         # Step 1: Image Processing (Tab removal, etc.)
         print(f"🔄 Processing score image (refinement)...")
-        cleaned_path = process_score(str(temp_raw_path), config=OMRProcessingConfig(remove_tabs=True), debug=False)
+        cleaned_path = await asyncio.to_thread(
+            process_score, str(temp_raw_path), config=OMRProcessingConfig(remove_tabs=True), debug=False
+        )
         
         # Step 2: Run OMR Engine on the processed image
         print(f"🎹 Running OMR engine...")
-        mxl_path, req_out_dir = run_omr_engine(Path(cleaned_path), file_stem, output_dir)
+        mxl_path, req_out_dir = await asyncio.to_thread(
+            run_omr_engine, Path(cleaned_path), file_stem, output_dir
+        )
         
         if not mxl_path or not mxl_path.exists():
             raise FileNotFoundError("OMR Engine failed to produce MusicXML.")
 
-        midi_path = convert_musicxml_to_midi(str(mxl_path), req_out_dir, file_stem)
+        midi_path = await asyncio.to_thread(
+            convert_musicxml_to_midi, str(mxl_path), req_out_dir, file_stem
+        )
         
         print(f"✅ [Debug] Pipeline complete for {file_stem}. MusicXML: {mxl_path}, MIDI created: {midi_path is not None}")
         return {

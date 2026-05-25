@@ -3,3 +3,13 @@ __pycache__/
 temp_uploads/
 processed_scores/
 venv/
+.env
+.DS_Store
+.pytest_cache/
+.vscode/
+.idea/
+*.log
+*.swp
+dist/
+build/
+*.egg-info/

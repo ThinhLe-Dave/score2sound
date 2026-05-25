@@ -9,83 +9,6 @@ const fileNameDisplay = document.getElementById('file-name');
 const tempoSlider = document.getElementById('tempoSlider');
 const tempoValue = document.getElementById('tempoValue');
 let progressInterval;
-let baseBpm = 120; // Default fallback for MIDI tempo
-
-// Monitor state changes and update UI
-const updateAudioStatusUI = () => {
-    if (typeof Tone !== 'undefined' && Tone.context) {
-        const state = Tone.context.state;
-        const statusEl = document.getElementById('audioStatus');
-        if (statusEl) {
-            statusEl.className = `audio-status ${state}`;
-            const textEl = statusEl.querySelector('.status-text');
-            if (textEl) textEl.textContent = `Audio: ${state.charAt(0).toUpperCase() + state.slice(1)}`;
-        }
-    }
-};
-
-if (typeof Tone !== 'undefined' && Tone.context) {
-    Tone.context.on('statechange', updateAudioStatusUI);
-    // Initial check
-    updateAudioStatusUI();
-}
-
-// Global helper to resume Tone.js on user interaction to satisfy browser autoplay policies
-const resumeToneContext = async () => {
-    if (typeof Tone !== 'undefined') {
-        try {
-            // Always call Tone.start() on user gesture for Safari
-            await Tone.start();
-            
-            if (Tone.context.state !== 'running') {
-                console.log(`[Debug] Attempting to resume Tone.js from state: ${Tone.context.state}`);
-                await Tone.context.resume();
-            }
-
-            // Safari-specific "poke": Play a tiny silent note to unlock the hardware output
-            const osc = Tone.context.createOscillator();
-            const silentGain = Tone.context.createGain();
-            silentGain.gain.value = 0;
-            osc.connect(silentGain);
-            silentGain.connect(Tone.context.destination);
-            osc.start(0);
-            osc.stop(0.1);
-
-            Tone.Destination.mute = false;
-            updateAudioStatusUI();
-        } catch (err) {
-                console.error("[Debug] Failed to resume Tone.js context:", err);
-        }
-    }
-};
-
-// Allow clicking the status indicator to manually fix audio
-const audioStatusBtn = document.getElementById('audioStatus');
-if (audioStatusBtn) {
-    audioStatusBtn.addEventListener('click', resumeToneContext);
-}
-
-// Listen globally for interaction to satisfy strict browser policies
-['click', 'mousedown', 'touchstart', 'touchend', 'keydown'].forEach(type => {
-    window.addEventListener(type, resumeToneContext, { once: true });
-});
-
-// Debug: Monitor global Tone.js volume
-if (typeof Tone !== 'undefined') {
-    setInterval(() => {
-        if (Tone.Destination) {
-            const transportBPM = (Tone.Transport && Tone.Transport.bpm) ? Tone.Transport.bpm.value.toFixed(1) : 'N/A';
-            
-            // Check our custom tracking property for the multiplier
-            const playRate = (Tone.Transport && typeof Tone.Transport._customRate === 'number')
-                ? Tone.Transport._customRate.toFixed(2)
-                : '1.00';
-            // Also update UI here as a fallback
-            updateAudioStatusUI();
-            console.log(`[Debug] Volume: ${Tone.Destination.volume.value}dB | Tone State: ${Tone.context.state} | Transport BPM: ${transportBPM} | Rate: ${playRate}x`);
-        }
-    }, 5000);
-}
 
 // Handle click on drop zone
 dropZone.addEventListener('click', () => fileInput.click());
@@ -142,7 +65,7 @@ tempoSlider.addEventListener('input', (e) => {
         // Real-time speed adjustment via Tone.js Transport BPM scaling
         if (window.Tone && Tone.Transport && Tone.Transport.bpm) {
             Tone.Transport._customRate = parseFloat(multiplier);
-            Tone.Transport.bpm.value = baseBpm * parseFloat(multiplier);
+            Tone.Transport.bpm.value = window.baseBpm * parseFloat(multiplier);
             console.log(`[Debug] Audio Engine BPM adjusted to: ${Tone.Transport.bpm.value.toFixed(1)} (Rate: ${multiplier}x)`);
         }
     }
@@ -154,17 +77,23 @@ async function initPlayback(xmlUrl, midiUrl) {
     loadingText.textContent = "Rendering sheet music...";
     
     try {
+        const container = document.getElementById("osmd-container");
         if (!osmd) {
-            osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay("osmd-container", {
+            osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay(container, {
                 autoResize: true,
-                drawTitle: false
+                drawTitle: false,
+                followCursor: true
             });
         }
+        // Ensure container allows absolute positioning of the cursor div
+        container.style.position = "relative";
         
         const response = await fetch(xmlUrl);
         const xmlText = await response.text();
         await osmd.load(xmlText);
         osmd.render();
+        osmd.cursor.reset();
+        osmd.cursor.show();
         
         // Set the MIDI source for the player
         if (midiUrl) {
@@ -202,7 +131,7 @@ async function initPlayback(xmlUrl, midiUrl) {
                     if (typeof Tone !== 'undefined' && Tone.Transport && Tone.Transport.bpm) {
                         Tone.Transport._customRate = parseFloat(multiplier);
                         // baseBpm will be captured on 'start', but we apply initial scale here
-                        Tone.Transport.bpm.value = baseBpm * multiplier;
+                        Tone.Transport.bpm.value = window.baseBpm * multiplier;
                     }
                 }, 100);
 
@@ -243,20 +172,27 @@ function startProgress() {
 
 document.getElementById('uploadForm').addEventListener('submit', async function(e) {
     e.preventDefault();
-    
+    console.log("[Debug] Upload form submitted.");
+
     // Ensure Tone is started on form submission (user action)
     await resumeToneContext();
     if (typeof Tone !== 'undefined' && Tone.Transport && typeof Tone.Transport._customRate === 'undefined') {
         Tone.Transport._customRate = 1.0;
     }
 
-    if (!fileInput.files.length) return;
+    if (!fileInput.files.length) {
+        console.warn("[Debug] No file selected for upload.");
+        return;
+    }
+
+    const file = fileInput.files[0];
+    console.log(`[Debug] Preparing to upload: ${file.name} (${file.size} bytes, type: ${file.type})`);
 
     // Clear previous MIDI source to stop playback
     document.getElementById('midiPlayer').src = null;
 
     const formData = new FormData();
-    formData.append('file', fileInput.files[0]);
+    formData.append('file', file);
     
     const submitBtn = document.getElementById('submitBtn');
     submitBtn.disabled = true;
@@ -264,13 +200,17 @@ document.getElementById('uploadForm').addEventListener('submit', async function(
     document.getElementById('result').style.display = 'none';
     startProgress();
     
+    console.log("[Debug] Sending fetch request to /process-score...");
     fetch('/process-score', {
         method: 'POST',
         body: formData
     })
-    .then(response => {
+    .then(async response => {
+        console.log(`[Debug] Server responded with status: ${response.status} ${response.statusText}`);
         if (!response.ok) {
-            throw new Error('Processing failed');
+            const errorDetail = await response.text();
+            console.error(`[Debug] Server Error Detail: ${errorDetail}`);
+            throw new Error(`Processing failed: ${response.status} - ${errorDetail || 'Unknown Error'}`);
         }
         return response.json();
     })
@@ -301,74 +241,11 @@ document.getElementById('uploadForm').addEventListener('submit', async function(
     });
 });
 
-// Player Specific Event Listeners
-const player = document.getElementById('midiPlayer');
-
-// CRITICAL: Listen for interaction on the player itself to resume AudioContext.
-// Browsers often require the gesture to be on the actual playing element or its container.
-const resumeAudio = async () => {
-    console.log("[Debug] User interaction detected on player. Resuming context...");
-    await resumeToneContext();
-    if (typeof player.resumeAudioContext === 'function') {
-        try {
-            await player.resumeAudioContext();
-        } catch (e) {
-            console.warn("[Debug] player.resumeAudioContext() failed:", e);
-        }
-    }
-    // Force destination to be active and unmuted
-    if (typeof Tone !== 'undefined') {
-        Tone.Destination.mute = false;
-        if (Tone.Destination.volume.value < -80) Tone.Destination.volume.value = 0;
-        if (Tone.context.state !== 'running') {
-            await Tone.context.resume();
-        }
-    }
-};
-
-['pointerdown', 'click', 'touchstart', 'touchend', 'mousedown'].forEach(type => player.addEventListener(type, resumeAudio));
-
-player.addEventListener('load', () => console.log("[Debug] MIDI Player successfully loaded the source."));
-player.addEventListener('start', (e) => {
-    // Inspect the note sequence being played
-    console.log("[Debug] Note Sequence Object:", player.noteSequence);
-
-    // Force unmute and resume on every start event
-    if (typeof Tone !== 'undefined') {
-        Tone.Destination.mute = false;
-        if (Tone.context.state !== 'running') Tone.context.resume();
-    }
-
-    // Capture the base BPM set by Magenta for this MIDI and apply current multiplier
-    if (Tone.Transport && Tone.Transport.bpm) {
-        // Small delay to let Magenta finish its internal start logic which often resets BPM
-        setTimeout(() => {
-            // Magenta sets the Transport BPM when it starts a sequence based on MIDI metadata
-            const detectedBpm = Tone.Transport.bpm.value;
-            if (detectedBpm > 0) baseBpm = detectedBpm;
-            
-            const multiplier = parseFloat(tempoSlider.value) / 100;
-            Tone.Transport._customRate = parseFloat(multiplier);
-            Tone.Transport.bpm.value = baseBpm * multiplier;
-            console.log(`[Debug] Base BPM captured: ${baseBpm.toFixed(1)} | Adjusted BPM: ${Tone.Transport.bpm.value.toFixed(1)}`);
-        }, 50);
-    }
-    
-    console.log("[Debug] Playback started. Tone state:", Tone.context.state);
-    if (Tone.Destination.mute) console.warn("[Debug] Warning: Tone.js is MUTED!");
-});
-player.addEventListener('stop', () => console.log("[Debug] Playback stopped."));
-
 // Download MusicXML
 document.getElementById('downloadMusicXmlBtn').addEventListener('click', function() {
     if (currentResult) {
         window.open(currentResult.musicxml_url, '_blank');
     }
-});
-
-// Listen for player errors
-document.getElementById('midiPlayer').addEventListener('error', (e) => {
-    console.error("[Debug] MIDI Player encountered an error:", e);
 });
 
 // Download MIDI
