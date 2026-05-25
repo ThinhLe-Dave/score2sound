@@ -2,17 +2,11 @@ import cv2
 import numpy as np
 from pathlib import Path
 
-def assess_image_quality(image_path: str):
+def assess_image_quality(img: np.ndarray, filename: str = "unknown"):
     """
     Assess the quality of an image for OMR processing.
     Analyzes sharpness, brightness, and contrast.
     """
-    path = Path(image_path)
-    if not path.exists():
-        return {"error": f"File {image_path} not found."}
-
-    # Load image in grayscale for analysis
-    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
     if img is None:
         return {"error": "Could not decode image."}
 
@@ -39,7 +33,7 @@ def assess_image_quality(image_path: str):
     is_low_contrast = contrast < 20    # Flat image (e.g., light gray on dark gray)
 
     return {
-        "filename": path.name,
+        "filename": filename,
         "resolution": f"{width}x{height}",
         "metrics": {
             "sharpness": round(sharpness, 2),
@@ -81,16 +75,19 @@ def enhance_image_quality(image_path: str):
     if img is None:
         return {"error": "Could not decode image."}
 
-    # Apply enhancements
-    if assess_image_quality(image_path).get("flags", {}).get("is_blurry", False):
+    # Assess once and reuse flags
+    assessment = assess_image_quality(img, path.name)
+    flags = assessment.get("flags", {})
+
+    if flags.get("is_blurry", False):
         print("Image is blurry. Applying sharpening filter.")
         img = fix_blurry_image(img)
 
-    if assess_image_quality(image_path).get("flags", {}).get("is_low_contrast", False):
+    if flags.get("is_low_contrast", False):
         print("Image has low contrast. Applying enhancement.")
         img = enhance_contrast(img)
 
-    if assess_image_quality(image_path).get("flags", {}).get("is_too_dark", False) or assess_image_quality(image_path).get("flags", {}).get("is_too_light", False):
+    if flags.get("is_too_dark", False) or flags.get("is_too_light", False):
         print("Image brightness needs adjustment.")
         img = enhance_brightness(img)
 

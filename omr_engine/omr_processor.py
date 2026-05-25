@@ -3,9 +3,6 @@ import numpy as np
 from pathlib import Path
 from .image_quality import (
     assess_image_quality,
-    fix_blurry_image,
-    enhance_contrast,
-    enhance_brightness,
     enhance_image_quality
 )
 from .tab_removal import OMRProcessingConfig, remove_guitar_tabs
@@ -26,7 +23,8 @@ def process_score(
     
     # Ensure the image is grayscale safely before quality assessment and processing
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
-    if(failed := assess_image_quality(str(image_path)).get("quality_score") == "Fail"):
+    assessment = assess_image_quality(gray, image_stem)
+    if assessment.get("quality_score") == "Fail":
         print(f"Image quality assessment failed for {image_path}. Attempting enhancement.")
         enhancement_result = enhance_image_quality(str(image_path))
         if "error" in enhancement_result:
